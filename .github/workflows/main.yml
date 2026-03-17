@@ -1,10 +1,9 @@
 name: CI
 
 on:
-  push:
   workflow_dispatch:
   schedule:
-    - cron: "0 */2 * * *"   # каждые 2 часа
+    - cron: "0 */2 * * *"
 
 permissions:
   contents: read
@@ -21,7 +20,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # 📦 Кэш всех zip
       - name: Restore ZIP cache
         id: zip-cache
         uses: actions/cache@v4
@@ -35,15 +33,13 @@ jobs:
         run: |
           New-Item -ItemType Directory -Path C:\9Hits -Force
 
-      # ⬇️ Скачиваем только если нет в кэше
-      - name: Download main package
+      - name: Download package (if not cached)
         if: steps.zip-cache.outputs.cache-hit != 'true'
         run: |
           Invoke-WebRequest `
             "https://files.catbox.moe/vz8sjk.zip" `
             -OutFile "$env:GITHUB_WORKSPACE\hits.zip"
 
-      # если zip уже есть — просто копируем
       - name: Place ZIP
         run: |
           if (Test-Path "$env:GITHUB_WORKSPACE\hits.zip") {
