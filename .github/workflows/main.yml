@@ -3,14 +3,14 @@ name: CI
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 */2 * * *"
+    - cron: "*/15 * * * *"
 
 permissions:
   contents: read
 
 concurrency:
   group: ci-chain
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -24,7 +24,7 @@ jobs:
         run: |
           New-Item -ItemType Directory -Path C:\9Hits -Force
 
-      # кэш всех zip
+      # 📦 Кэш ZIP
       - name: Restore ZIP cache
         id: cache-zip
         uses: actions/cache@v4
@@ -34,7 +34,7 @@ jobs:
             state.zip
           key: zip-cache-v1
 
-      # скачиваем только если нет кэша
+      # ⬇️ скачивание только при отсутствии кэша
       - name: Download main package
         if: steps.cache-zip.outputs.cache-hit != 'true'
         run: |
@@ -74,13 +74,51 @@ jobs:
 
           Remove-Item $tmp -Recurse -Force
 
-      - name: Run executable
+      # 🔁 Запуск с авто-рестартом + мягкое завершение
+      - name: Run with auto-restart + graceful shutdown
         run: |
           $exe = Get-ChildItem C:\9Hits -Recurse -Filter "9hits.exe" | Select-Object -First 1
 
-          if ($exe) {
-            Start-Process $exe.FullName
-            Start-Sleep 60
+          if (!$exe) {
+            Write-Host "9hits.exe not found"
+            exit 1
+          }
+
+          $exePath = $exe.FullName
+          $proc = $null
+
+          # ~3 часа (чуть меньше)
+          $end = (Get-Date).AddMinutes(175)
+
+          try {
+            while ((Get-Date) -lt $end) {
+
+              # если процесс не запущен — стартуем
+              if (!$proc -or $proc.HasExited) {
+                $proc = Start-Process $exePath -PassThru
+                Write-Host "9hits started"
+              } else {
+                Write-Host "9hits running"
+              }
+
+              Start-Sleep 15
+            }
+          }
+          finally {
+            # 💡 мягкое завершение при остановке job
+            if ($proc -and !$proc.HasExited) {
+              Write-Host "Stopping 9hits gracefully..."
+
+              try {
+                $proc.CloseMainWindow() | Out-Null
+                Start-Sleep 5
+              } catch {}
+
+              if (!$proc.HasExited) {
+                Write-Host "Force kill 9hits"
+                $proc.Kill()
+              }
+            }
           }
 
       - name: Resource usage summary
