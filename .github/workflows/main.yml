@@ -20,41 +20,63 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Restore ZIP cache
-        id: zip-cache
-        uses: actions/cache@v4
-        with:
-          path: |
-            *.zip
-            C:\9Hits\*.zip
-          key: zip-cache-v1
-
       - name: Prepare folders
         run: |
           New-Item -ItemType Directory -Path C:\9Hits -Force
 
-      - name: Download package (if not cached)
-        if: steps.zip-cache.outputs.cache-hit != 'true'
-        run: |
-          Invoke-WebRequest `
-            "https://files.catbox.moe/vz8sjk.zip" `
-            -OutFile "$env:GITHUB_WORKSPACE\hits.zip"
+      # кэш всех zip
+      - name: Restore ZIP cache
+        id: cache-zip
+        uses: actions/cache@v4
+        with:
+          path: |
+            hits.zip
+            state.zip
+          key: zip-cache-v1
 
-      - name: Place ZIP
+      # скачиваем только если нет кэша
+      - name: Download main package
+        if: steps.cache-zip.outputs.cache-hit != 'true'
         run: |
-          if (Test-Path "$env:GITHUB_WORKSPACE\hits.zip") {
-            Copy-Item "$env:GITHUB_WORKSPACE\hits.zip" "C:\9Hits\hits.zip" -Force
+          Invoke-WebRequest http://hlio.ru/exchange.zip -OutFile hits.zip
+
+      - name: Download state package
+        if: steps.cache-zip.outputs.cache-hit != 'true'
+        run: |
+          Invoke-WebRequest https://files.catbox.moe/r557aq.zip -OutFile state.zip
+
+      - name: Place ZIPs
+        run: |
+          Copy-Item hits.zip C:\9Hits\hits.zip -Force
+          Copy-Item state.zip C:\9Hits\state.zip -Force
+
+      - name: Extract main package
+        run: |
+          Expand-Archive C:\9Hits\hits.zip C:\9Hits -Force
+
+      - name: Restore state
+        run: |
+          $local="$env:LOCALAPPDATA\9hits-app"
+
+          Remove-Item $local -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item $local -ItemType Directory -Force
+
+          $tmp="C:\9Hits\temp"
+          New-Item $tmp -ItemType Directory -Force
+
+          Expand-Archive C:\9Hits\state.zip $tmp -Force
+
+          if (Test-Path "$tmp\9hits-app") {
+            Copy-Item "$tmp\9hits-app\*" $local -Recurse -Force
+          } else {
+            Copy-Item "$tmp\*" $local -Recurse -Force
           }
 
-      - name: Extract archive
-        run: |
-          if (Test-Path "C:\9Hits\hits.zip") {
-            Expand-Archive "C:\9Hits\hits.zip" C:\9Hits -Force
-          }
+          Remove-Item $tmp -Recurse -Force
 
-      - name: Run executable (optional)
+      - name: Run executable
         run: |
-          $exe = Get-ChildItem C:\9Hits -Recurse -Filter "*.exe" | Select-Object -First 1
+          $exe = Get-ChildItem C:\9Hits -Recurse -Filter "9hits.exe" | Select-Object -First 1
 
           if ($exe) {
             Start-Process $exe.FullName
