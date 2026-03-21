@@ -32,7 +32,7 @@ jobs:
           path: |
             hits.zip
             state.zip
-          key: zip-cache-v2
+          key: zip-cache-v3
 
       # ⬇️ скачивание только при отсутствии кэша
       - name: Download main package
